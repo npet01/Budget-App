@@ -8,6 +8,8 @@ import { DEFAULT_SETTINGS, migrateSettings } from './lib/defaults'
 import { MonthsView } from './components/MonthsView'
 import { WishesView } from './components/WishesView'
 import { ExpensesView } from './components/ExpensesView'
+import { BackupCard } from './components/BackupCard'
+import type { Backup } from './lib/backup'
 
 type Tab = 'wishes' | 'expenses' | 'months' | 'settings'
 
@@ -32,6 +34,15 @@ export default function App() {
   const [shared, setShared] = useState(readSharedProduct)
   const clearShared = useCallback(() => setShared(null), [])
 
+  const restore = (backup: Backup) => {
+    setSettings(backup.settings)
+    setWishes(backup.wishes)
+    setExpenses(backup.expenses)
+    setTab('wishes')
+    setToast('Sicherung eingelesen.')
+    window.setTimeout(() => setToast(null), 4000)
+  }
+
   if (!settings) {
     return (
       <main>
@@ -41,6 +52,7 @@ export default function App() {
           <p className="muted">Alle Daten bleiben auf deinem Gerät.</p>
         </header>
         <SettingsForm initial={DEFAULT_SETTINGS} onDone={(s) => setSettings({ ...s, savingsDate: todayIso() })} />
+        <BackupCard onRestore={restore} />
       </main>
     )
   }
@@ -118,6 +130,7 @@ export default function App() {
             }}
             onCancel={() => setTab('wishes')}
           />
+          <BackupCard data={{ settings, wishes, expenses }} onRestore={restore} />
           <DeleteAll
             onConfirm={() => {
               setSettings(null)

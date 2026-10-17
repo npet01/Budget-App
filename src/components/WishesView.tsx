@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Deposit, Expense, Settings, Wish } from '../lib/types'
-import { availableToday, currentMonth, monthAllowance, monthKey, spentThisMonth, surplusPerDay, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
+import { availableToday, balanceCheck, currentMonth, needsBalanceCheck, monthAllowance, monthKey, spentThisMonth, surplusPerDay, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
 import { formatDate, formatEuro, newId, parseAmount, todayIso } from '../lib/format'
 
 interface Props {
@@ -29,10 +29,53 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
   const [open, setOpen] = useState<string | null>(null)
   const update = (id: string, patch: Partial<Wish>) => setWishes(wishes.map((w) => (w.id === id ? { ...w, ...patch } : w)))
 
+  const available = availableToday(settings, expenses, today)
+  const [panel, setPanel] = useState<'money' | 'check' | null>(null)
+  const checkDue = needsBalanceCheck(settings, today)
+
   return (
     <>
-      <section className="card">
-        <h2>Diesen Monat</h2>
+      {(checkDue || panel === 'check') && (
+        <BalanceCheck
+          estimate={available}
+          due={checkDue}
+          onSave={(actual) => {
+            setDeposits([...settings.deposits, balanceCheck(settings, expenses, today, actual, newId())])
+            setPanel(null)
+          }}
+          onClose={checkDue ? undefined : () => setPanel(null)}
+        />
+      )}
+
+      <section className="card hero">
+        <small>Für Wünsche verfügbar</small>
+        <strong>{formatEuro(Math.max(0, available))}</strong>
+        {perDay > 0 && <span className="grow">+ {formatEuro(perDay)} pro Tag</span>}
+        <div className="actions">
+          {!checkDue && (
+            <button className="secondary" onClick={() => setPanel(panel === 'check' ? null : 'check')}>
+              Stimmt nicht?
+            </button>
+          )}
+          <button className="secondary" onClick={() => setPanel(panel === 'money' ? null : 'money')}>
+            + Geld hinzufügen
+          </button>
+        </div>
+      </section>
+
+      {panel === 'money' && <AddMoney settings={settings} setDeposits={setDeposits} onClose={() => setPanel(null)} />}
+
+      {surplus <= 0 && (
+        <p className="warning">
+          Nach Fixkosten, Alltagsbudget und Puffer bleibt nichts übrig. Wünsche gehen nur mit extra Zurücklegen oder mit Schulden.
+        </p>
+      )}
+
+      <details className="card month-details">
+        <summary>
+          <span>Diesen Monat</span>
+          <span className={month.left < 0 ? 'negative' : ''}>{formatEuro(month.left)} übrig</span>
+        </summary>
         <div className="breakdown">
           <div>
             <span>Netto{month.incomeIsActual ? '' : ' (erwartet)'}</span>
@@ -57,37 +100,23 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
             <span className={month.left < 0 ? 'negative' : ''}>{formatEuro(month.left)}</span>
           </div>
         </div>
-        <p className="muted">
-          Davon noch im Alltagsbudget:{' '}
-          <strong className={budgetLeft < 0 ? 'negative' : ''}>
-            {formatEuro(budgetLeft)} von {formatEuro(budget)}
-          </strong>
-        </p>
-      </section>
-
-      <section className="card summary">
-        <div>
-          <small>Dein echter Stundenlohn</small>
-          <strong>{formatEuro(realHourlyWage(settings))}</strong>
+        <div className="breakdown">
+          <div>
+            <span>Alltagsbudget übrig</span>
+            <span className={budgetLeft < 0 ? 'negative' : ''}>
+              {formatEuro(budgetLeft)} von {formatEuro(budget)}
+            </span>
+          </div>
+          <div>
+            <span>Pro Monat für Wünsche</span>
+            <span className={surplus <= 0 ? 'negative' : ''}>{formatEuro(surplus)}</span>
+          </div>
+          <div>
+            <span>Netto pro Stunde</span>
+            <span>{formatEuro(realHourlyWage(settings))}</span>
+          </div>
         </div>
-        <div>
-          <small>Heute für Wünsche frei</small>
-          <strong>{formatEuro(Math.max(0, availableToday(settings, expenses, today)))}</strong>
-          {perDay > 0 && <small className="grow">+ {formatEuro(perDay)} pro Tag</small>}
-        </div>
-        <div>
-          <small>Pro Monat dazu</small>
-          <strong className={surplus <= 0 ? 'negative' : ''}>{formatEuro(surplus)}</strong>
-        </div>
-      </section>
-
-      <AddMoney settings={settings} setDeposits={setDeposits} />
-
-      {surplus <= 0 && (
-        <p className="warning">
-          Nach Fixkosten, Alltagsbudget und Puffer bleibt nichts übrig. Wünsche gehen nur mit extra Zurücklegen oder mit Schulden.
-        </p>
-      )}
+      </details>
 
       <WishForm
         queued={wishes.length > 0}
@@ -181,20 +210,12 @@ function daysText(days: number | null): string {
   return days === 1 ? 'Noch 1 Tag' : `Noch ${days} Tage`
 }
 
-function AddMoney({ settings, setDeposits }: { settings: Settings; setDeposits: (d: Deposit[]) => void }) {
-  const [open, setOpen] = useState(false)
+function AddMoney({ settings, setDeposits, onClose }: { settings: Settings; setDeposits: (d: Deposit[]) => void; onClose: () => void }) {
   const [amountText, setAmountText] = useState('')
   const [label, setLabel] = useState('')
   const amount = parseAmount(amountText)
-  const recent = settings.deposits.filter((d) => d.date >= settings.savingsDate).slice(-5).reverse()
+  const recent = settings.deposits.filter((d) => !d.check && d.date >= settings.savingsDate).slice(-5).reverse()
 
-  if (!open) {
-    return (
-      <button className="secondary" onClick={() => setOpen(true)}>
-        + Geld hinzufügen
-      </button>
-    )
-  }
   return (
     <section className="card">
       <h2>Geld dazubekommen?</h2>
@@ -205,7 +226,7 @@ function AddMoney({ settings, setDeposits }: { settings: Settings; setDeposits: 
       </div>
       <input placeholder="Wofür? z. B. Geburtstag" value={label} onChange={(e) => setLabel(e.target.value)} />
       <div className="actions">
-        <button className="secondary" onClick={() => setOpen(false)}>
+        <button className="secondary" onClick={onClose}>
           Schließen
         </button>
         <button
@@ -234,6 +255,50 @@ function AddMoney({ settings, setDeposits }: { settings: Settings; setDeposits: 
           ))}
         </ul>
       )}
+    </section>
+  )
+}
+
+/** Gleicht das freie Geld mit dem echten Stand ab, damit die Hochrechnung nicht wegdriftet. */
+function BalanceCheck({
+  estimate,
+  due,
+  onSave,
+  onClose,
+}: {
+  estimate: number
+  due: boolean
+  onSave: (actual: number) => void
+  onClose?: () => void
+}) {
+  const [text, setText] = useState('')
+  const actual = parseAmount(text)
+  const shown = Math.max(0, estimate)
+  return (
+    <section className="card balance-check">
+      <h2>{due ? 'Kurzer Monats-Check' : 'Stimmt der Betrag?'}</h2>
+      <p>
+        Die App rechnet damit, dass du gerade <strong>{formatEuro(shown)}</strong> für Wünsche zur Seite hast. Schau kurz auf dein Konto:
+        Passt das ungefähr?
+      </p>
+      <div className="actions">
+        {onClose && (
+          <button className="secondary" onClick={onClose}>
+            Abbrechen
+          </button>
+        )}
+        <button onClick={() => onSave(shown)}>Passt so</button>
+      </div>
+      <label className="field">
+        <span>Oder trag ein, wie viel es wirklich ist</span>
+        <div className="input-suffix">
+          <input inputMode="decimal" placeholder="z. B. 250" value={text} onChange={(e) => setText(e.target.value)} />
+          <em>€</em>
+        </div>
+      </label>
+      <button className="secondary" disabled={actual === null || actual < 0} onClick={() => onSave(actual!)}>
+        Diesen Betrag übernehmen
+      </button>
     </section>
   )
 }

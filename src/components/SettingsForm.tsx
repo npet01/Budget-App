@@ -123,7 +123,6 @@ export function SettingsForm({ initial, onDone, onCancel }: Props) {
       )}
       {numberField('hoursPerWeek', 'Arbeitsstunden pro Woche', undefined, 'Std.')}
       {numberField('workDaysPerWeek', 'Arbeitstage pro Woche', undefined, 'Tage')}
-      {numberField('commuteMinutesPerDay', 'Fahrtzeit pro Arbeitstag (hin und zurück)', 'Zählt mit, weil du diese Zeit für die Arbeit opferst.', 'Min.')}
       {breakdown && breakdown.gross > 0 && (
         <div className="breakdown">
           <div>
@@ -148,7 +147,7 @@ export function SettingsForm({ initial, onDone, onCancel }: Props) {
       {s.incomeHistory.length > 0 && (
         <p className="muted">Die App rechnet mit dem Durchschnitt deiner eingetragenen Monate: {formatEuro(monthlyNetIncome(s))} netto.</p>
       )}
-      {monthlyNetIncome(s) > 0 && <p className="highlight">Dein echter Stundenlohn: {formatEuro(realHourlyWage(s))}</p>}
+      {monthlyNetIncome(s) > 0 && <p className="highlight">Dein Netto-Stundenlohn: {formatEuro(realHourlyWage(s))}</p>}
     </>,
     <>
       <h2>Feste Kosten</h2>

@@ -43,7 +43,7 @@ export function MonthsView({ settings, expenses, setIncomeHistory }: Props) {
           <strong>{formatEuro(monthlyNetIncome(settings))}</strong>
         </div>
         <div>
-          <small>Echter Stundenlohn</small>
+          <small>Netto pro Stunde</small>
           <strong>{formatEuro(realHourlyWage(settings))}</strong>
         </div>
         <div>

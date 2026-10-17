@@ -21,7 +21,10 @@ export interface Deposit {
   /** YYYY-MM-DD */
   date: string
   label: string
+  /** Bei einem Abgleich auch negativ: die Korrektur gegenüber der Hochrechnung */
   amount: number
+  /** Monatlicher Abgleich mit dem echten Kontostand statt echter Einnahme */
+  check?: boolean
 }
 
 export interface Settings {
@@ -38,8 +41,6 @@ export interface Settings {
   incomeHistory: IncomeMonth[]
   /** Vertraglich bezahlte Arbeitsstunden pro Woche */
   hoursPerWeek: number
-  /** Unbezahlte Zeit pro Arbeitstag, die trotzdem für die Arbeit draufgeht (Fahrt, Umziehen) */
-  commuteMinutesPerDay: number
   workDaysPerWeek: number
   fixedCosts: FixedCost[]
   /** Geplante Ausgaben für den Alltag (Essen, Freizeit) pro Monat */

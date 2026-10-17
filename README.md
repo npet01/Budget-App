@@ -2,7 +2,7 @@
 
 Eine Web-App, die Preise in deine echte Arbeitszeit umrechnet und zeigt, ab wann du dir einen Wunsch leisten kannst, ohne Schulden zu machen.
 
-- **Echter Stundenlohn:** Nettogehalt geteilt durch Arbeitszeit plus Fahrtzeit.
+- **Netto-Stundenlohn:** Nettogehalt geteilt durch die bezahlten Arbeitsstunden.
 - **Wunschliste:** Jeder Wunsch zeigt Stunden und Arbeitstage und das Datum, ab dem er leistbar ist. Wünsche werden in Listenreihenfolge angespart.
 - **48 Stunden Bedenkzeit:** Wünsche lassen sich parken, bevor man sie kauft.
 - **Ausgaben und Kassenbons:** Bon fotografieren, die Summe wird auf dem Gerät erkannt. Ausgaben über dem Alltagsbudget verschieben die Wünsche, und die App sagt, um wie viele Tage.
