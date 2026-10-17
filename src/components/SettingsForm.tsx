@@ -1,8 +1,43 @@
 import { useState } from 'react'
 import type { FixedCost, Settings } from '../lib/types'
 import { formatEuro, newId, parseAmount } from '../lib/format'
-import { realHourlyWage } from '../lib/calc'
+import { grossBreakdown, monthlyNetIncome, realHourlyWage } from '../lib/calc'
+import type { TaxClass } from '../lib/salary'
 
+
+const TAX_CLASSES: [TaxClass, string][] = [
+  [1, 'I – ledig'],
+  [2, 'II – alleinerziehend'],
+  [3, 'III – verheiratet, mehr verdienend'],
+  [4, 'IV – verheiratet, ähnlich verdienend'],
+  [5, 'V – verheiratet, weniger verdienend'],
+  [6, 'VI – Zweitjob'],
+]
+
+function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: T
+  options: [T, string][]
+  onChange: (v: T) => void
+}) {
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <div className="segmented" role="radiogroup" aria-label={label}>
+        {options.map(([v, text]) => (
+          <button key={v} role="radio" aria-checked={value === v} className={value === v ? 'on' : ''} onClick={() => onChange(v)}>
+            {text}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 const COST_SUGGESTIONS = ['Miete', 'Strom', 'Handy', 'Internet', 'Versicherungen', 'Streaming', 'Fitnessstudio', 'Auto / Ticket']
 
@@ -35,17 +70,85 @@ export function SettingsForm({ initial, onDone, onCancel }: Props) {
   const updateCost = (id: string, patch: Partial<FixedCost>) =>
     set('fixedCosts', s.fixedCosts.map((c) => (c.id === id ? { ...c, ...patch } : c)))
 
+  const hourly = s.payType === 'hourly'
+  const gross = s.amountType === 'gross'
+  const amountLabel = `${hourly ? 'Stundenlohn' : 'Gehalt pro Monat'} (${gross ? 'brutto' : 'netto'})`
+  const breakdown = gross ? grossBreakdown(s) : null
+
   const steps = [
     <>
       <h2>Was verdienst du?</h2>
       <p className="muted">Damit rechnet die App Preise in deine Arbeitszeit um.</p>
-      {numberField('netIncome', 'Nettogehalt pro Monat', 'Was wirklich auf deinem Konto ankommt.')}
+      <Segmented
+        label="Wie wirst du bezahlt?"
+        value={s.payType}
+        options={[
+          ['salary', 'Festgehalt'],
+          ['hourly', 'Stundenlohn'],
+        ]}
+        onChange={(v) => set('payType', v)}
+      />
+      <Segmented
+        label="Dein Betrag ist"
+        value={s.amountType}
+        options={[
+          ['gross', 'Brutto'],
+          ['net', 'Netto'],
+        ]}
+        onChange={(v) => set('amountType', v)}
+      />
+      {/* key erzwingt ein neues Feld, wenn sich die Bedeutung des Betrags ändert */}
+      <div key={`${s.payType}-${s.amountType}`}>{numberField('payAmount', amountLabel, undefined, hourly ? '€/Std.' : '€')}</div>
+      {gross && (
+        <>
+          <label className="field">
+            <span>Steuerklasse</span>
+            <select value={s.taxClass} onChange={(e) => set('taxClass', Number(e.target.value) as TaxClass)}>
+              {TAX_CLASSES.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.churchTax} onChange={(e) => set('churchTax', e.target.checked)} />
+            Ich zahle Kirchensteuer
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={s.hasChildren} onChange={(e) => set('hasChildren', e.target.checked)} />
+            Ich habe Kinder (günstigere Pflegeversicherung)
+          </label>
+        </>
+      )}
       {numberField('hoursPerWeek', 'Arbeitsstunden pro Woche', undefined, 'Std.')}
       {numberField('workDaysPerWeek', 'Arbeitstage pro Woche', undefined, 'Tage')}
       {numberField('commuteMinutesPerDay', 'Fahrtzeit pro Arbeitstag (hin und zurück)', 'Zählt mit, weil du diese Zeit für die Arbeit opferst.', 'Min.')}
-      {s.netIncome > 0 && (
-        <p className="highlight">Dein echter Stundenlohn: {formatEuro(realHourlyWage(s))}</p>
+      {breakdown && breakdown.gross > 0 && (
+        <div className="breakdown">
+          <div>
+            <span>Brutto im Monat</span>
+            <span>{formatEuro(breakdown.gross)}</span>
+          </div>
+          <div>
+            <span>Sozialabgaben</span>
+            <span>− {formatEuro(breakdown.socialSecurity)}</span>
+          </div>
+          <div>
+            <span>Lohnsteuer{breakdown.soli + breakdown.churchTax > 0 ? ', Soli, Kirche' : ''}</span>
+            <span>− {formatEuro(breakdown.wageTax + breakdown.soli + breakdown.churchTax)}</span>
+          </div>
+          <div className="total">
+            <span>Geschätztes Netto</span>
+            <span>{formatEuro(breakdown.net)}</span>
+          </div>
+          <small>Schätzung für 2026. Genauer wird es, wenn du unter „Monate“ einträgst, was wirklich ankam.</small>
+        </div>
       )}
+      {s.incomeHistory.length > 0 && (
+        <p className="muted">Die App rechnet mit dem Durchschnitt deiner eingetragenen Monate: {formatEuro(monthlyNetIncome(s))} netto.</p>
+      )}
+      {monthlyNetIncome(s) > 0 && <p className="highlight">Dein echter Stundenlohn: {formatEuro(realHourlyWage(s))}</p>}
     </>,
     <>
       <h2>Feste Kosten</h2>
@@ -106,7 +209,7 @@ export function SettingsForm({ initial, onDone, onCancel }: Props) {
           )
         )}
         <button
-          disabled={step === 0 && (s.netIncome <= 0 || s.hoursPerWeek <= 0)}
+          disabled={step === 0 && (monthlyNetIncome(s) <= 0 || s.hoursPerWeek <= 0)}
           onClick={() => (last ? onDone(s) : setStep(step + 1))}
         >
           {last ? 'Fertig' : 'Weiter'}

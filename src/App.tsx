@@ -4,11 +4,12 @@ import { useStoredState } from './lib/storage'
 import { shiftByExpense } from './lib/calc'
 import { newId, todayIso } from './lib/format'
 import { SettingsForm } from './components/SettingsForm'
-import { DEFAULT_SETTINGS } from './lib/defaults'
+import { DEFAULT_SETTINGS, migrateSettings } from './lib/defaults'
+import { MonthsView } from './components/MonthsView'
 import { WishesView } from './components/WishesView'
 import { ExpensesView } from './components/ExpensesView'
 
-type Tab = 'wishes' | 'expenses' | 'settings'
+type Tab = 'wishes' | 'expenses' | 'months' | 'settings'
 
 /** Liest Produkte, die über das Teilen-Menü (Web Share Target) hereinkommen. */
 function readSharedProduct(): { name: string; url: string } | null {
@@ -22,7 +23,8 @@ function readSharedProduct(): { name: string; url: string } | null {
 }
 
 export default function App() {
-  const [settings, setSettings] = useStoredState<Settings | null>('settings', null)
+  const [storedSettings, setSettings] = useStoredState<Settings | null>('settings', null)
+  const settings = storedSettings && migrateSettings(storedSettings)
   const [wishes, setWishes] = useStoredState<Wish[]>('wishes', [])
   const [expenses, setExpenses] = useStoredState<Expense[]>('expenses', [])
   const [tab, setTab] = useState<Tab>('wishes')
@@ -89,6 +91,13 @@ export default function App() {
           onRemove={(id) => setExpenses(expenses.filter((e) => e.id !== id))}
         />
       )}
+      {tab === 'months' && (
+        <MonthsView
+          settings={settings}
+          expenses={expenses}
+          setIncomeHistory={(incomeHistory) => setSettings({ ...settings, incomeHistory })}
+        />
+      )}
       {tab === 'settings' && (
         <>
           <SettingsForm
@@ -118,6 +127,9 @@ export default function App() {
         </button>
         <button className={tab === 'expenses' ? 'active' : ''} onClick={() => setTab('expenses')}>
           Ausgaben
+        </button>
+        <button className={tab === 'months' ? 'active' : ''} onClick={() => setTab('months')}>
+          Monate
         </button>
         <button className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}>
           Einstellungen

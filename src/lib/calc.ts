@@ -1,19 +1,66 @@
-import type { Expense, Settings, Wish } from './types'
+import type { Expense, IncomeMonth, Settings, Wish } from './types'
+import { estimateNet, type NetBreakdown } from './salary'
 
 const WEEKS_PER_MONTH = 52 / 12
 const DAYS_PER_MONTH = 365.25 / 12
+const HISTORY_MONTHS = 3
+
+/** Bruttolohn pro Monat laut Vertrag (Stundenlohn × Stunden oder Festgehalt). */
+function contractMonthlyAmount(s: Settings): number {
+  return s.payType === 'hourly' ? s.payAmount * s.hoursPerWeek * WEEKS_PER_MONTH : s.payAmount
+}
+
+/** Brutto-Netto-Schätzung für den Vertragslohn (nur sinnvoll bei Brutto-Eingabe). */
+export function grossBreakdown(s: Settings): NetBreakdown {
+  return estimateNet({
+    monthlyGross: contractMonthlyAmount(s),
+    taxClass: s.taxClass,
+    churchTax: s.churchTax,
+    hasChildren: s.hasChildren,
+  })
+}
+
+/** Netto laut Vertrag: direkt eingegeben oder aus dem Brutto geschätzt. */
+export function contractMonthlyNet(s: Settings): number {
+  return s.amountType === 'net' ? contractMonthlyAmount(s) : grossBreakdown(s).net
+}
+
+/** Die letzten eingetragenen Monate, neueste zuerst. */
+export function recentIncome(s: Settings, count = HISTORY_MONTHS): IncomeMonth[] {
+  return [...s.incomeHistory].sort((a, b) => b.month.localeCompare(a.month)).slice(0, count)
+}
+
+export type IncomeSource = 'history' | 'net' | 'estimate'
+
+export function incomeSource(s: Settings): IncomeSource {
+  if (recentIncome(s).length) return 'history'
+  return s.amountType === 'net' ? 'net' : 'estimate'
+}
+
+/** Netto pro Monat: Durchschnitt der letzten echten Monate, sonst laut Vertrag. */
+export function monthlyNetIncome(s: Settings): number {
+  const recent = recentIncome(s)
+  if (!recent.length) return contractMonthlyNet(s)
+  return recent.reduce((sum, m) => sum + m.net, 0) / recent.length
+}
+
+/** Bezahlte Stunden pro Monat: Durchschnitt der eingetragenen Monate, sonst laut Vertrag. */
+function monthlyPaidHours(s: Settings): number {
+  const withHours = recentIncome(s).filter((m) => m.hours && m.hours > 0)
+  if (withHours.length) return withHours.reduce((sum, m) => sum + m.hours!, 0) / withHours.length
+  return s.hoursPerWeek * WEEKS_PER_MONTH
+}
 
 /** Stunden, die man im Monat tatsächlich für die Arbeit aufwendet, inklusive Fahrtzeit. */
 export function monthlyWorkHours(s: Settings): number {
-  const paid = s.hoursPerWeek * WEEKS_PER_MONTH
   const commute = (s.commuteMinutesPerDay / 60) * s.workDaysPerWeek * WEEKS_PER_MONTH
-  return paid + commute
+  return monthlyPaidHours(s) + commute
 }
 
 /** Echter Stundenlohn: netto, geteilt durch alle Stunden, die die Arbeit kostet. */
 export function realHourlyWage(s: Settings): number {
   const hours = monthlyWorkHours(s)
-  return hours > 0 ? s.netIncome / hours : 0
+  return hours > 0 ? monthlyNetIncome(s) / hours : 0
 }
 
 export function hoursPerWorkDay(s: Settings): number {
@@ -38,10 +85,10 @@ export function fixedCostTotal(s: Settings): number {
 
 /** Was pro Monat für Wünsche übrig bleibt, wenn das Alltagsbudget eingehalten wird. */
 export function monthlySurplus(s: Settings): number {
-  return s.netIncome - fixedCostTotal(s) - s.dailyBudget - s.safetyBuffer
+  return monthlyNetIncome(s) - fixedCostTotal(s) - s.dailyBudget - s.safetyBuffer
 }
 
-function monthKey(date: Date): string {
+export function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
@@ -158,4 +205,43 @@ export function addDays(d: Date, days: number): Date {
 
 export function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / 86_400_000)
+}
+
+export interface MonthOverview {
+  /** YYYY-MM */
+  month: string
+  income: number
+  /** false = kein echter Wert eingetragen, es wird mit dem erwarteten Netto gerechnet */
+  incomeIsActual: boolean
+  hours?: number
+  fixedCosts: number
+  /** Alltagsausgaben plus gekaufte Wünsche */
+  spent: number
+  left: number
+}
+
+/** Monatsübersicht für alle Monate mit Einkommen oder Ausgaben, neueste zuerst. */
+export function monthOverview(s: Settings, expenses: Expense[], today: Date, limit = 6): MonthOverview[] {
+  const months = new Set<string>([monthKey(today)])
+  s.incomeHistory.forEach((m) => months.add(m.month))
+  expenses.forEach((e) => months.add(e.date.slice(0, 7)))
+  const fixed = fixedCostTotal(s)
+  const expected = monthlyNetIncome(s)
+  return [...months]
+    .sort((a, b) => b.localeCompare(a))
+    .slice(0, limit)
+    .map((month) => {
+      const entry = s.incomeHistory.find((m) => m.month === month)
+      const income = entry ? entry.net : expected
+      const spent = expenses.filter((e) => e.date.startsWith(month)).reduce((sum, e) => sum + e.amount, 0)
+      return {
+        month,
+        income,
+        incomeIsActual: Boolean(entry),
+        hours: entry?.hours,
+        fixedCosts: fixed,
+        spent,
+        left: income - fixed - spent,
+      }
+    })
 }
