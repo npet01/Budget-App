@@ -111,7 +111,8 @@ export function availableToday(s: Settings, expenses: Expense[], today: Date): n
   const start = parseIsoDate(s.savingsDate)
   const elapsed = Math.max(0, daysBetween(start, today))
   const since = expenses.filter((e) => e.date >= s.savingsDate)
-  const wishSpend = since.filter((e) => e.wish).reduce((sum, e) => sum + e.amount, 0)
+  // Was aus einem Spartopf bezahlt wurde, war nie Teil des Plans
+  const wishSpend = since.filter((e) => e.wish).reduce((sum, e) => sum + e.amount - (e.fromPot ?? 0), 0)
   return s.savings + (monthlySurplus(s) / DAYS_PER_MONTH) * elapsed - overspend(s, since, start) - wishSpend
 }
 
@@ -140,10 +141,17 @@ export function parseIsoDate(iso: string): Date {
   return new Date(y, m - 1, d)
 }
 
+/** Was nach dem Spartopf noch fehlt. */
+export function wishRemaining(wish: Wish): number {
+  return Math.max(0, wish.price - (wish.saved ?? 0))
+}
+
 export interface WishPlan {
   wish: Wish
-  /** Summe aller Wünsche bis einschließlich diesem, in Reihenfolge der Liste */
+  /** Summe aller noch offenen Beträge bis einschließlich diesem Wunsch, in Reihenfolge der Liste */
   cumulative: number
+  /** Wie viel dafür heute noch fehlt */
+  missing: number
   /** null = mit dem aktuellen Plan nie ohne Schulden leistbar */
   affordableFrom: Date | null
   affordableNow: boolean
@@ -165,17 +173,34 @@ export function planWishes(
   const perDay = monthlySurplus(s) / DAYS_PER_MONTH + extraPerDay
   let cumulative = 0
   return wishes.map((wish) => {
-    cumulative += wish.price
+    const remaining = wishRemaining(wish)
+    // Ein voller Spartopf wartet auf keinen anderen Wunsch
+    if (remaining === 0) {
+      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), affordableNow: true }
+    }
+    cumulative += remaining
     const missing = cumulative - available
     if (missing <= 0) {
-      return { wish, cumulative, affordableFrom: startOfDay(today), affordableNow: true }
+      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), affordableNow: true }
     }
     if (perDay <= 0) {
-      return { wish, cumulative, affordableFrom: null, affordableNow: false }
+      return { wish, cumulative, missing, affordableFrom: null, affordableNow: false }
     }
     const days = Math.ceil(missing / perDay)
-    return { wish, cumulative, affordableFrom: addDays(today, days), affordableNow: false }
+    return { wish, cumulative, missing, affordableFrom: addDays(today, days), affordableNow: false }
   })
+}
+
+/**
+ * Wie viel man ab heute täglich extra zurücklegen müsste, damit ein Wunsch bis
+ * zum Wunschdatum leistbar ist. 0 = klappt schon mit dem Plan, null = Datum vorbei.
+ */
+export function extraPerDayForTarget(plan: WishPlan, s: Settings, today: Date, target: Date): number | null {
+  const days = daysBetween(today, target)
+  if (plan.missing <= 0) return 0
+  if (days <= 0) return null
+  const perDay = Math.max(0, monthlySurplus(s) / DAYS_PER_MONTH)
+  return Math.max(0, (plan.missing - perDay * days) / days)
 }
 
 /** Um wie viele Tage sich jeder Wunsch durch eine zusätzliche Ausgabe verschiebt. */
@@ -207,6 +232,12 @@ export function addDays(d: Date, days: number): Date {
 
 export function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / 86_400_000)
+}
+
+/** Der laufende Monat aus der Monatsübersicht. */
+export function currentMonth(s: Settings, expenses: Expense[], today: Date): MonthOverview {
+  const key = monthKey(today)
+  return monthOverview(s, expenses, today, Infinity).find((m) => m.month === key)!
 }
 
 export interface MonthOverview {
