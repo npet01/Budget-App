@@ -45,7 +45,7 @@ describe('Brutto-Netto-Schätzung', () => {
 })
 
 describe('Einkommen aus echten Monaten', () => {
-  const settings: Settings = { ...DEFAULT_SETTINGS, payType: 'hourly', amountType: 'gross', payAmount: 15, commuteMinutesPerDay: 0 }
+  const settings: Settings = { ...DEFAULT_SETTINGS, payType: 'hourly', amountType: 'gross', payAmount: 15 }
 
   it('ohne eingetragene Monate wird aus dem Stundenlohn geschätzt', () => {
     const gross = 15 * 40 * (52 / 12)

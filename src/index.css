@@ -267,6 +267,84 @@ button.full {
   border-color: var(--accent);
 }
 
+.hero {
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+
+.hero strong {
+  font-size: 2.4rem;
+  line-height: 1.1;
+}
+
+.hero .grow {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.hero .actions {
+  justify-content: center;
+  margin-top: 8px;
+}
+
+.month-details {
+  display: block;
+}
+
+.month-details .breakdown + .breakdown {
+  margin-top: 12px;
+}
+
+.month-details summary {
+  gap: 8px;
+  display: flex;
+  justify-content: space-between;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.month-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.month-details summary > span:first-child {
+  flex: 1;
+}
+
+.month-details summary::after {
+  content: '▾';
+  color: var(--muted);
+}
+
+.month-details[open] summary {
+  margin-bottom: 10px;
+}
+
+.balance-check {
+  border: 2px solid var(--accent);
+}
+
+label.button {
+  display: inline-block;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+label.button.secondary {
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .summary small.grow {
   color: var(--ok);
   font-weight: 600;

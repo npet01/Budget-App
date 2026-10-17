@@ -1,4 +1,4 @@
-import type { Expense, IncomeMonth, Settings, Wish } from './types'
+import type { Deposit, Expense, IncomeMonth, Settings, Wish } from './types'
 import { estimateNet, type NetBreakdown } from './salary'
 
 const WEEKS_PER_MONTH = 52 / 12
@@ -51,20 +51,14 @@ function monthlyPaidHours(s: Settings): number {
   return s.hoursPerWeek * WEEKS_PER_MONTH
 }
 
-/** Stunden, die man im Monat tatsächlich für die Arbeit aufwendet, inklusive Fahrtzeit. */
-export function monthlyWorkHours(s: Settings): number {
-  const commute = (s.commuteMinutesPerDay / 60) * s.workDaysPerWeek * WEEKS_PER_MONTH
-  return monthlyPaidHours(s) + commute
-}
-
-/** Echter Stundenlohn: netto, geteilt durch alle Stunden, die die Arbeit kostet. */
+/** Netto pro gearbeiteter Stunde. */
 export function realHourlyWage(s: Settings): number {
-  const hours = monthlyWorkHours(s)
+  const hours = monthlyPaidHours(s)
   return hours > 0 ? monthlyNetIncome(s) / hours : 0
 }
 
 export function hoursPerWorkDay(s: Settings): number {
-  return s.workDaysPerWeek > 0 ? monthlyWorkHours(s) / (s.workDaysPerWeek * WEEKS_PER_MONTH) : 0
+  return s.workDaysPerWeek > 0 ? monthlyPaidHours(s) / (s.workDaysPerWeek * WEEKS_PER_MONTH) : 0
 }
 
 export interface WorkTime {
@@ -135,6 +129,31 @@ export function monthAllowance(s: Settings, key: string): number {
   if (key !== monthKey(start)) return s.dailyBudget
   const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()
   return (s.dailyBudget * (daysInMonth - start.getDate() + 1)) / daysInMonth
+}
+
+const CHECK_EVERY_DAYS = 30
+
+/** Letzter Tag, an dem das freie Geld mit der Wirklichkeit abgeglichen wurde. */
+export function lastCheckDate(s: Settings): string {
+  return s.deposits.filter((d) => d.check).reduce((last, d) => (d.date > last ? d.date : last), s.savingsDate)
+}
+
+/** Nach einem Monat ohne Abgleich fragt die App nach dem echten Stand. */
+export function needsBalanceCheck(s: Settings, today: Date): boolean {
+  return daysBetween(parseIsoDate(lastCheckDate(s)), today) >= CHECK_EVERY_DAYS
+}
+
+/**
+ * Hält fest, wie viel wirklich für Wünsche da ist. Gespeichert wird nur die
+ * Abweichung zur Hochrechnung, so bleibt alles davor unverändert.
+ */
+export function balanceCheck(s: Settings, expenses: Expense[], today: Date, actual: number, id: string): Deposit {
+  const estimate = availableToday(s, expenses, today)
+  return { id, date: isoDay(today), label: 'Abgleich', amount: Math.round((actual - estimate) * 100) / 100, check: true }
+}
+
+function isoDay(d: Date): string {
+  return `${monthKey(d)}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 /** Was im Schnitt jeden Tag für Wünsche dazukommt. */
@@ -278,7 +297,7 @@ export function monthOverview(s: Settings, expenses: Expense[], today: Date, lim
       const entry = s.incomeHistory.find((m) => m.month === month)
       const income = entry ? entry.net : expected
       const spent = expenses.filter((e) => e.date.startsWith(month)).reduce((sum, e) => sum + e.amount, 0)
-      const extra = s.deposits.filter((d) => d.date.startsWith(month)).reduce((sum, d) => sum + d.amount, 0)
+      const extra = s.deposits.filter((d) => !d.check && d.date.startsWith(month)).reduce((sum, d) => sum + d.amount, 0)
       return {
         month,
         income,

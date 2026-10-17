@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, availableToday, currentMonth, monthAllowance, surplusPerDay, extraPerDayForTarget, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
+import { addDays, availableToday, balanceCheck, currentMonth, needsBalanceCheck, monthAllowance, surplusPerDay, extraPerDayForTarget, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
 import type { Expense, Settings, Wish } from './types'
 
 const settings: Settings = {
@@ -11,7 +11,6 @@ const settings: Settings = {
   hasChildren: false,
   incomeHistory: [],
   hoursPerWeek: 40,
-  commuteMinutesPerDay: 0,
   workDaysPerWeek: 5,
   fixedCosts: [{ id: 'm', label: 'Miete', amount: 800 }],
   dailyBudget: 600,
@@ -27,11 +26,6 @@ const day = (iso: string) => new Date(`${iso}T12:00:00`)
 describe('Stundenlohn', () => {
   it('teilt Netto durch die Monatsstunden', () => {
     expect(realHourlyWage(settings)).toBeCloseTo(2000 / (40 * 52 / 12), 5)
-  })
-
-  it('rechnet Fahrtzeit als Arbeitszeit mit', () => {
-    const withCommute = { ...settings, commuteMinutesPerDay: 60 }
-    expect(realHourlyWage(withCommute)).toBeLessThan(realHourlyWage(settings))
   })
 
   it('rechnet Preise in Stunden und Arbeitstage um', () => {
@@ -191,5 +185,26 @@ describe('Alltagsbudget und Tagesbetrag', () => {
 
   it('verteilt den Monatsüberschuss auf die Tage', () => {
     expect(surplusPerDay(settings)).toBeCloseTo(500 / (365.25 / 12), 5)
+  })
+})
+
+describe('Monatlicher Abgleich', () => {
+  it('fragt nach 30 Tagen ohne Abgleich nach dem echten Stand', () => {
+    expect(needsBalanceCheck(settings, day('2026-10-30'))).toBe(false)
+    expect(needsBalanceCheck(settings, day('2026-10-31'))).toBe(true)
+  })
+
+  it('übernimmt den echten Betrag und gilt als erledigt', () => {
+    const today = day('2026-11-05')
+    const check = balanceCheck(settings, [], today, 450, 'c')
+    const checked = { ...settings, deposits: [check] }
+    expect(availableToday(checked, [], today)).toBeCloseTo(450, 1)
+    expect(needsBalanceCheck(checked, today)).toBe(false)
+  })
+
+  it('zählt nicht als Extra-Einnahme im Monat', () => {
+    const today = day('2026-10-20')
+    const check = balanceCheck(settings, [], today, 0, 'c')
+    expect(currentMonth({ ...settings, deposits: [check] }, [], today).extra).toBe(0)
   })
 })

@@ -10,7 +10,6 @@ export const DEFAULT_SETTINGS: Settings = {
   hasChildren: false,
   incomeHistory: [],
   hoursPerWeek: 40,
-  commuteMinutesPerDay: 30,
   workDaysPerWeek: 5,
   fixedCosts: [],
   dailyBudget: 400,
@@ -21,9 +20,12 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 /** Übernimmt Einstellungen aus der ersten Version, die nur ein Nettogehalt kannte. */
-export function migrateSettings(stored: Settings & { netIncome?: number }): Settings {
-  if (stored.payType) return stored.deposits ? stored : { ...stored, deposits: [] }
-  const { netIncome, ...rest } = stored
+export function migrateSettings(stored: Settings & { netIncome?: number; commuteMinutesPerDay?: number }): Settings {
+  // Die Fahrtzeit wird nicht mehr mitgerechnet
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { commuteMinutesPerDay, ...current } = stored
+  if (current.payType) return current.deposits ? current : { ...current, deposits: [] }
+  const { netIncome, ...rest } = current
   return {
     ...DEFAULT_SETTINGS,
     ...rest,
