@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Deposit, Expense, Settings, Wish } from '../lib/types'
 import { availableToday, balanceCheck, currentMonth, needsBalanceCheck, monthAllowance, monthKey, spentThisMonth, surplusPerDay, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
 import { formatDate, formatEuro, newId, parseAmount, todayIso } from '../lib/format'
+import { extractUrl, nameFromUrl, safeUrl, shopName } from '../lib/link'
 
 interface Props {
   settings: Settings
@@ -142,8 +143,13 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
               <li key={wish.id} className="card wish">
                 <div className="wish-head">
                   <div>
-                    <h3>{wish.url ? <a href={wish.url} target="_blank" rel="noreferrer">{wish.name}</a> : wish.name}</h3>
+                    <h3>{wish.name}</h3>
                     <span className="price">{formatEuro(wish.price)}</span>
+                    {wish.url && safeUrl(wish.url) && (
+                      <a className="shop-link" href={safeUrl(wish.url)!} target="_blank" rel="noopener noreferrer">
+                        Zum Shop ({shopName(wish.url)}) ↗
+                      </a>
+                    )}
                   </div>
                   <div className="reorder">
                     <button className="icon" disabled={i === 0} onClick={() => setWishes(move(wishes, i, i - 1))} aria-label="Nach oben">
@@ -418,19 +424,21 @@ function WishForm({
 }) {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
+  const [nameGuessed, setNameGuessed] = useState(false)
   const [priceText, setPriceText] = useState('')
   const [think, setThink] = useState(true)
 
   useEffect(() => {
     if (shared) {
-      setName(shared.name)
-      setUrl(shared.url)
+      const link = safeUrl(shared.url) ?? ''
+      setName(shared.name || (link ? nameFromUrl(link) : ''))
+      setUrl(link)
       clearShared()
     }
   }, [shared, clearShared])
 
   const price = parseAmount(priceText)
-  const valid = name.trim() && price && price > 0
+  const valid = name.trim() && price && price > 0 && !(url.trim() && !safeUrl(url))
 
   const submit = () => {
     if (!valid) return
@@ -439,24 +447,54 @@ function WishForm({
       id: newId(),
       name: name.trim(),
       price: price!,
-      url: url.trim() || undefined,
+      url: safeUrl(url) ?? undefined,
       createdAt: todayIso(now),
       thinkUntil: think ? new Date(now.getTime() + THINK_HOURS * 3_600_000).toISOString() : undefined,
     })
     setName('')
     setUrl('')
     setPriceText('')
+    setNameGuessed(false)
   }
+
+  const pasteLink = (text: string) => {
+    const link = extractUrl(text)
+    setUrl(link ?? text)
+    // Namen nur vorschlagen, wenn noch keiner eingetragen ist
+    if (link && !name.trim()) {
+      const guess = nameFromUrl(link)
+      if (guess) {
+        setName(guess)
+        setNameGuessed(true)
+      }
+    }
+  }
+  const linkInvalid = url.trim() !== '' && !safeUrl(url)
 
   return (
     <section className="card">
       <h2>Was wünschst du dir?</h2>
-      <input placeholder="z. B. Winterjacke" value={name} onChange={(e) => setName(e.target.value)} />
+      <input
+        type="url"
+        inputMode="url"
+        placeholder="Link zum Produkt einfügen (optional)"
+        value={url}
+        onChange={(e) => pasteLink(e.target.value)}
+      />
+      {linkInvalid && <small className="negative">Das sieht nicht nach einem Link aus. Er sollte mit https:// anfangen.</small>}
+      <input
+        placeholder="z. B. Winterjacke"
+        value={name}
+        onChange={(e) => {
+          setName(e.target.value)
+          setNameGuessed(false)
+        }}
+      />
+      {nameGuessed && <small className="muted">Name aus dem Link übernommen. Du kannst ihn ändern.</small>}
       <div className="input-suffix">
         <input inputMode="decimal" placeholder="Preis" value={priceText} onChange={(e) => setPriceText(e.target.value)} />
         <em>€</em>
       </div>
-      {url && <small className="muted link">Link: {url}</small>}
       {price ? <p className="preview">{previewText(daysFor(price), queued)}</p> : null}
       <label className="check">
         <input type="checkbox" checked={think} onChange={(e) => setThink(e.target.checked)} />

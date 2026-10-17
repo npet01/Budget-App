@@ -267,6 +267,14 @@ button.full {
   border-color: var(--accent);
 }
 
+.shop-link {
+  display: inline-block;
+  margin-top: 6px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .hero {
   align-items: center;
   text-align: center;
