@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { availableToday, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
+import { addDays, availableToday, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
 import type { Expense, Settings, Wish } from './types'
 
 const settings: Settings = {
@@ -89,5 +89,22 @@ describe('Wunschplanung', () => {
   it('gekaufte Wünsche gehen vom verfügbaren Geld ab', () => {
     const bought: Expense = { id: 'w', date: '2026-10-01', label: 'a', amount: 150, source: 'manual', wish: true }
     expect(availableToday(settings, [bought], day('2026-10-01'))).toBe(50)
+  })
+})
+
+describe('Schneller sparen', () => {
+  it('extra Geld pro Tag holt einen Wunsch nach vorne', () => {
+    const today = day('2026-10-01')
+    const [normal] = planWishes([wish('a', 500)], settings, [], today)
+    const [faster] = planWishes([wish('a', 500)], settings, [], today, 5)
+    // Überschuss 500 €/Monat ≈ 16,43 €/Tag, mit 5 € mehr ≈ 21,43 €/Tag; es fehlen 300 €, also 19 statt 15 Tage
+    expect(normal.affordableFrom).toEqual(addDays(today, 19))
+    expect(faster.affordableFrom).toEqual(addDays(today, 15))
+  })
+
+  it('macht einen Wunsch ohne Überschuss erst möglich', () => {
+    const broke = { ...settings, dailyBudget: 1100 }
+    const [p] = planWishes([wish('a', 500)], broke, [], day('2026-10-01'), 10)
+    expect(p.affordableFrom).not.toBeNull()
   })
 })
