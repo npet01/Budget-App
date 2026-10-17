@@ -267,6 +267,24 @@ button.full {
   border-color: var(--accent);
 }
 
+.save-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.pot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pot small {
+  color: var(--muted);
+}
+
 .faster {
   color: var(--accent);
   font-weight: 600;

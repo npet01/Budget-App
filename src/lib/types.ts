@@ -53,6 +53,8 @@ export interface Expense {
   warranty?: boolean
   /** Gekaufter Wunsch: zählt nicht gegen das Alltagsbudget */
   wish?: boolean
+  /** Teil des Preises, der aus dem Spartopf des Wunsches bezahlt wurde */
+  fromPot?: number
 }
 
 export interface Wish {
@@ -63,4 +65,8 @@ export interface Wish {
   createdAt: string
   /** Bedenkzeit läuft bis zu diesem Zeitpunkt (ISO) */
   thinkUntil?: string
+  /** Extra für genau diesen Wunsch zurückgelegt (Spartopf), zusätzlich zum Plan */
+  saved?: number
+  /** Bis wann man den Wunsch haben möchte (YYYY-MM-DD) */
+  targetDate?: string
 }

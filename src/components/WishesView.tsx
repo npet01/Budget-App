@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Expense, Settings, Wish } from '../lib/types'
-import { availableToday, daysBetween, monthlySurplus, planWishes, priceToWorkTime, realHourlyWage } from '../lib/calc'
+import { availableToday, currentMonth, daysBetween, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, priceToWorkTime, realHourlyWage, type WishPlan } from '../lib/calc'
 import { formatDate, formatEuro, formatWorkTime, newId, parseAmount, todayIso } from '../lib/format'
 
 interface Props {
@@ -15,18 +15,40 @@ interface Props {
 
 const THINK_HOURS = 48
 const EXTRA_OPTIONS = [1, 2, 5, 10]
-const DAYS_PER_MONTH = 365.25 / 12
+const POT_STEPS = [5, 10, 20, 50]
 
 export function WishesView({ settings, wishes, expenses, setWishes, onBought, shared, clearShared }: Props) {
   const today = new Date()
   const plans = planWishes(wishes, settings, expenses, today)
   const surplus = monthlySurplus(settings)
-  const [extra, setExtra] = useState(0)
-  const faster = extra > 0 ? planWishes(wishes, settings, expenses, today, extra) : null
-  const waiting = plans.some((p) => !p.affordableNow)
+  const month = currentMonth(settings, expenses, today)
+  const [open, setOpen] = useState<string | null>(null)
+  const update = (id: string, patch: Partial<Wish>) => setWishes(wishes.map((w) => (w.id === id ? { ...w, ...patch } : w)))
 
   return (
     <>
+      <section className="card">
+        <h2>Diesen Monat</h2>
+        <div className="breakdown">
+          <div>
+            <span>Netto{month.incomeIsActual ? '' : ' (erwartet)'}</span>
+            <span>{formatEuro(month.income)}</span>
+          </div>
+          <div>
+            <span>Feste Ausgaben</span>
+            <span>− {formatEuro(month.fixedCosts)}</span>
+          </div>
+          <div>
+            <span>Sonstige Ausgaben bisher</span>
+            <span>− {formatEuro(month.spent)}</span>
+          </div>
+          <div className="total">
+            <span>Restgeld diesen Monat</span>
+            <span className={month.left < 0 ? 'negative' : ''}>{formatEuro(month.left)}</span>
+          </div>
+        </div>
+      </section>
+
       <section className="card summary">
         <div>
           <small>Dein echter Stundenlohn</small>
@@ -44,13 +66,11 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
 
       {surplus <= 0 && (
         <p className="warning">
-          Nach Fixkosten, Alltagsbudget und Puffer bleibt nichts übrig. Wünsche wären nur mit Schulden möglich.
+          Nach Fixkosten, Alltagsbudget und Puffer bleibt nichts übrig. Wünsche gehen nur mit extra Zurücklegen oder mit Schulden.
         </p>
       )}
 
       <WishForm settings={settings} shared={shared} clearShared={clearShared} onAdd={(w) => setWishes([...wishes, w])} />
-
-      {waiting && <SaveFaster extra={extra} setExtra={setExtra} />}
 
       {plans.length === 0 ? (
         <p className="empty">
@@ -58,10 +78,12 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
         </p>
       ) : (
         <ul className="wishes">
-          {plans.map(({ wish, affordableFrom, affordableNow }, i) => {
+          {plans.map((plan, i) => {
+            const { wish, affordableFrom, affordableNow } = plan
             const thinking = wish.thinkUntil && new Date(wish.thinkUntil) > today
-            const sooner = faster && !affordableNow ? faster[i].affordableFrom : null
-            const saved = sooner && affordableFrom ? daysBetween(sooner, affordableFrom) : null
+            const saved = wish.saved ?? 0
+            const target = wish.targetDate ? parseIsoDate(wish.targetDate) : null
+            const needed = target ? extraPerDayForTarget(plan, settings, today, target) : null
             return (
               <li key={wish.id} className="card wish">
                 <div className="wish-head">
@@ -86,16 +108,37 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
                       ? `Leistbar ab ${formatDate(affordableFrom)}`
                       : 'Mit deinem Plan nicht ohne Schulden leistbar'}
                 </p>
-                {sooner && saved !== 0 && (
-                  <p className="faster">
-                    Mit {formatEuro(extra)} pro Tag: ab {formatDate(sooner)}
-                    {saved ? `, ${saved === 1 ? '1 Tag' : `${saved} Tage`} früher` : ''}
-                  </p>
+                {saved > 0 && (
+                  <div className="pot">
+                    <div className="bar" aria-hidden>
+                      <span style={{ width: `${Math.min(100, (saved / wish.price) * 100)}%` }} />
+                    </div>
+                    <small>
+                      {formatEuro(saved)} von {formatEuro(wish.price)} zurückgelegt
+                    </small>
+                  </div>
+                )}
+                {target && !affordableNow && (
+                  <p className="faster">{targetText(target, needed)}</p>
                 )}
                 {thinking && (
                   <p className="thinking">Bedenkzeit läuft noch bis {formatDate(new Date(wish.thinkUntil!))}. Willst du es dann immer noch?</p>
                 )}
+                {open === wish.id && (
+                  <SavePanel
+                    wish={wish}
+                    plan={plan}
+                    settings={settings}
+                    expenses={expenses}
+                    wishes={wishes}
+                    index={i}
+                    onChange={(patch) => update(wish.id, patch)}
+                  />
+                )}
                 <div className="actions small">
+                  <button className="secondary" onClick={() => setOpen(open === wish.id ? null : wish.id)} aria-expanded={open === wish.id}>
+                    {open === wish.id ? 'Fertig' : 'Sparen'}
+                  </button>
                   <button className="secondary" onClick={() => setWishes(wishes.filter((w) => w.id !== wish.id))}>
                     Brauch ich nicht
                   </button>
@@ -112,24 +155,89 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
   )
 }
 
-function SaveFaster({ extra, setExtra }: { extra: number; setExtra: (n: number) => void }) {
+function targetText(target: Date, needed: number | null): string {
+  const date = formatDate(target)
+  if (needed === null) return `Dein Wunschdatum ${date} ist schon vorbei.`
+  if (needed === 0) return `Bis ${date} klappt es mit deinem Plan.`
+  return `Für ${date} musst du ab heute ${formatEuro(needed)} pro Tag extra zurücklegen.`
+}
+
+function SavePanel({
+  wish,
+  plan,
+  settings,
+  expenses,
+  wishes,
+  index,
+  onChange,
+}: {
+  wish: Wish
+  plan: WishPlan
+  settings: Settings
+  expenses: Expense[]
+  wishes: Wish[]
+  index: number
+  onChange: (patch: Partial<Wish>) => void
+}) {
+  const saved = wish.saved ?? 0
+  const [extra, setExtra] = useState(0)
+  const faster = extra > 0 && !plan.affordableNow ? planWishes(wishes, settings, expenses, new Date(), extra)[index].affordableFrom : null
+  const fewer = faster && plan.affordableFrom ? daysBetween(faster, plan.affordableFrom) : null
+  const setSaved = (n: number) => onChange({ saved: Math.max(0, Math.round(n * 100) / 100) || undefined })
+
   return (
-    <section className="card">
-      <h2>Schneller ans Ziel?</h2>
-      <p className="muted">Wie viel könntest du jeden Tag zusätzlich zur Seite legen?</p>
+    <div className="save-panel">
+      <label className="field">
+        <span>Schon extra für „{wish.name}“ zurückgelegt</span>
+        <div className="input-suffix">
+          {/* key setzt das Feld zurück, wenn die Schnelltasten den Betrag ändern */}
+          <input
+            key={saved}
+            inputMode="decimal"
+            placeholder="0,00"
+            defaultValue={saved ? String(saved).replace('.', ',') : ''}
+            onBlur={(e) => setSaved(parseAmount(e.target.value) ?? 0)}
+          />
+          <em>€</em>
+        </div>
+      </label>
       <div className="chips">
-        {EXTRA_OPTIONS.map((n) => (
-          <button key={n} className={extra === n ? 'chip on' : 'chip'} aria-pressed={extra === n} onClick={() => setExtra(extra === n ? 0 : n)}>
-            {formatEuro(n)} / Tag
+        {POT_STEPS.map((n) => (
+          <button key={n} className="chip" onClick={() => setSaved(saved + n)}>
+            + {formatEuro(n)}
           </button>
         ))}
       </div>
-      {extra > 0 && (
-        <p className="muted">
-          Das sind etwa {formatEuro(extra * DAYS_PER_MONTH)} im Monat. Unten siehst du, wie viel früher jeder Wunsch dann drin ist.
-        </p>
+
+      <label className="field">
+        <span>Bis wann möchtest du es haben?</span>
+        <input
+          type="date"
+          value={wish.targetDate ?? ''}
+          min={todayIso()}
+          onChange={(e) => onChange({ targetDate: e.target.value || undefined })}
+        />
+      </label>
+
+      {!plan.affordableNow && (
+        <div className="field">
+          <span>Was wäre, wenn du extra zurücklegst?</span>
+          <div className="chips">
+            {EXTRA_OPTIONS.map((n) => (
+              <button key={n} className={extra === n ? 'chip on' : 'chip'} aria-pressed={extra === n} onClick={() => setExtra(extra === n ? 0 : n)}>
+                {formatEuro(n)} / Tag
+              </button>
+            ))}
+          </div>
+          {faster && (
+            <small className="faster">
+              Dann ab {formatDate(faster)}
+              {fewer ? `, ${fewer === 1 ? '1 Tag' : `${fewer} Tage`} früher` : ''}
+            </small>
+          )}
+        </div>
       )}
-    </section>
+    </div>
   )
 }
 

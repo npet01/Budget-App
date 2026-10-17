@@ -64,7 +64,15 @@ export default function App() {
     setWishes(wishes.filter((w) => w.id !== wish.id))
     setExpenses([
       ...expenses,
-      { id: newId(), date: todayIso(), label: wish.name, amount: wish.price, source: 'manual', wish: true },
+      {
+        id: newId(),
+        date: todayIso(),
+        label: wish.name,
+        amount: wish.price,
+        source: 'manual',
+        wish: true,
+        fromPot: wish.saved ? Math.min(wish.saved, wish.price) : undefined,
+      },
     ])
     setToast(`Viel Spaß mit „${wish.name}“!`)
     window.setTimeout(() => setToast(null), 4000)

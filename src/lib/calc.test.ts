@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, availableToday, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
+import { addDays, availableToday, currentMonth, extraPerDayForTarget, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
 import type { Expense, Settings, Wish } from './types'
 
 const settings: Settings = {
@@ -106,5 +106,53 @@ describe('Schneller sparen', () => {
     const broke = { ...settings, dailyBudget: 1100 }
     const [p] = planWishes([wish('a', 500)], broke, [], day('2026-10-01'), 10)
     expect(p.affordableFrom).not.toBeNull()
+  })
+})
+
+describe('Spartopf pro Wunsch', () => {
+  it('zieht das Zurückgelegte vom Preis ab', () => {
+    const today = day('2026-10-01')
+    const [p] = planWishes([{ ...wish('a', 500), saved: 300 }], settings, [], today)
+    expect(p.affordableNow).toBe(true)
+  })
+
+  it('ein voller Topf ist sofort leistbar, auch hinter teuren Wünschen', () => {
+    const [, b] = planWishes([wish('a', 5000), { ...wish('b', 80), saved: 80 }], settings, [], day('2026-10-01'))
+    expect(b.affordableNow).toBe(true)
+  })
+
+  it('beim Kauf zählt nur der Teil außerhalb des Topfs gegen das Ersparte', () => {
+    const bought: Expense = { id: 'k', date: '2026-10-01', label: 'a', amount: 150, source: 'manual', wish: true, fromPot: 100 }
+    expect(availableToday(settings, [bought], day('2026-10-01'))).toBe(150)
+  })
+})
+
+describe('Wunschdatum', () => {
+  const today = day('2026-10-01')
+
+  it('rechnet aus, wie viel pro Tag extra nötig ist', () => {
+    const [p] = planWishes([wish('a', 1000)], settings, [], today)
+    // es fehlen 800 €, der Plan bringt in 10 Tagen etwa 164 €
+    const perDay = 500 / (365.25 / 12)
+    expect(extraPerDayForTarget(p, settings, today, addDays(today, 10))).toBeCloseTo((800 - perDay * 10) / 10, 5)
+  })
+
+  it('ist 0, wenn der Plan schon reicht, und null für ein vergangenes Datum', () => {
+    const [p] = planWishes([wish('a', 300)], settings, [], today)
+    expect(extraPerDayForTarget(p, settings, today, addDays(today, 60))).toBe(0)
+    expect(extraPerDayForTarget(p, settings, today, addDays(today, -1))).toBeNull()
+  })
+})
+
+describe('Laufender Monat', () => {
+  it('zeigt Fixkosten, Ausgaben bisher und Restgeld', () => {
+    const spent: Expense[] = [
+      { id: '1', date: '2026-10-03', label: 'Einkauf', amount: 120, source: 'manual' },
+      { id: '2', date: '2026-09-28', label: 'alt', amount: 50, source: 'manual' },
+    ]
+    const m = currentMonth(settings, spent, day('2026-10-10'))
+    expect(m.fixedCosts).toBe(800)
+    expect(m.spent).toBe(120)
+    expect(m.left).toBe(2000 - 800 - 120)
   })
 })
