@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Deposit, Expense, Settings, Wish } from '../lib/types'
-import { availableToday, currentMonth, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
+import { availableToday, currentMonth, monthAllowance, monthKey, spentThisMonth, surplusPerDay, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
 import { formatDate, formatEuro, newId, parseAmount, todayIso } from '../lib/format'
 
 interface Props {
@@ -23,6 +23,9 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
   const plans = planWishes(wishes, settings, expenses, today)
   const surplus = monthlySurplus(settings)
   const month = currentMonth(settings, expenses, today)
+  const budget = monthAllowance(settings, monthKey(today))
+  const budgetLeft = budget - spentThisMonth(expenses, today)
+  const perDay = surplusPerDay(settings)
   const [open, setOpen] = useState<string | null>(null)
   const update = (id: string, patch: Partial<Wish>) => setWishes(wishes.map((w) => (w.id === id ? { ...w, ...patch } : w)))
 
@@ -54,6 +57,12 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
             <span className={month.left < 0 ? 'negative' : ''}>{formatEuro(month.left)}</span>
           </div>
         </div>
+        <p className="muted">
+          Davon noch im Alltagsbudget:{' '}
+          <strong className={budgetLeft < 0 ? 'negative' : ''}>
+            {formatEuro(budgetLeft)} von {formatEuro(budget)}
+          </strong>
+        </p>
       </section>
 
       <section className="card summary">
@@ -64,6 +73,7 @@ export function WishesView({ settings, wishes, expenses, setWishes, setDeposits,
         <div>
           <small>Heute für Wünsche frei</small>
           <strong>{formatEuro(Math.max(0, availableToday(settings, expenses, today)))}</strong>
+          {perDay > 0 && <small className="grow">+ {formatEuro(perDay)} pro Tag</small>}
         </div>
         <div>
           <small>Pro Monat dazu</small>

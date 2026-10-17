@@ -267,6 +267,11 @@ button.full {
   border-color: var(--accent);
 }
 
+.summary small.grow {
+  color: var(--ok);
+  font-weight: 600;
+}
+
 .worktime.ok {
   color: var(--ok);
 }
