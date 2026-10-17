@@ -4,9 +4,29 @@ export interface FixedCost {
   amount: number
 }
 
+import type { TaxClass } from './salary'
+
+/** Was tatsächlich in einem Monat auf dem Konto ankam. */
+export interface IncomeMonth {
+  /** YYYY-MM */
+  month: string
+  net: number
+  /** Tatsächlich gearbeitete Stunden, falls bekannt (wichtig bei Stundenlohn) */
+  hours?: number
+}
+
 export interface Settings {
-  /** Nettogehalt pro Monat in Euro */
-  netIncome: number
+  /** Festgehalt pro Monat oder Bezahlung pro Stunde */
+  payType: 'salary' | 'hourly'
+  /** Ob payAmount brutto oder netto ist */
+  amountType: 'gross' | 'net'
+  /** Monatsgehalt bzw. Stundenlohn in Euro */
+  payAmount: number
+  taxClass: TaxClass
+  churchTax: boolean
+  hasChildren: boolean
+  /** Echte Nettoeinkommen der letzten Monate; haben Vorrang vor der Schätzung */
+  incomeHistory: IncomeMonth[]
   /** Vertraglich bezahlte Arbeitsstunden pro Woche */
   hoursPerWeek: number
   /** Unbezahlte Zeit pro Arbeitstag, die trotzdem für die Arbeit draufgeht (Fahrt, Umziehen) */

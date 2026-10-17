@@ -3,7 +3,13 @@ import { availableToday, planWishes, priceToWorkTime, realHourlyWage, shiftByExp
 import type { Expense, Settings, Wish } from './types'
 
 const settings: Settings = {
-  netIncome: 2000,
+  payType: 'salary',
+  amountType: 'net',
+  payAmount: 2000,
+  taxClass: 1,
+  churchTax: false,
+  hasChildren: false,
+  incomeHistory: [],
   hoursPerWeek: 40,
   commuteMinutesPerDay: 0,
   workDaysPerWeek: 5,
