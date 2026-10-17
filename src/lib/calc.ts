@@ -113,7 +113,8 @@ export function availableToday(s: Settings, expenses: Expense[], today: Date): n
   const since = expenses.filter((e) => e.date >= s.savingsDate)
   // Was aus einem Spartopf bezahlt wurde, war nie Teil des Plans
   const wishSpend = since.filter((e) => e.wish).reduce((sum, e) => sum + e.amount - (e.fromPot ?? 0), 0)
-  return s.savings + (monthlySurplus(s) / DAYS_PER_MONTH) * elapsed - overspend(s, since, start) - wishSpend
+  const deposits = s.deposits.filter((d) => d.date >= s.savingsDate).reduce((sum, d) => sum + d.amount, 0)
+  return s.savings + deposits + (monthlySurplus(s) / DAYS_PER_MONTH) * elapsed - overspend(s, since, start) - wishSpend
 }
 
 function overspend(s: Settings, expenses: Expense[], start: Date): number {
@@ -154,6 +155,8 @@ export interface WishPlan {
   missing: number
   /** null = mit dem aktuellen Plan nie ohne Schulden leistbar */
   affordableFrom: Date | null
+  /** Kalendertage bis zum Kauf (0 = heute), null = nie */
+  daysLeft: number | null
   affordableNow: boolean
 }
 
@@ -176,18 +179,18 @@ export function planWishes(
     const remaining = wishRemaining(wish)
     // Ein voller Spartopf wartet auf keinen anderen Wunsch
     if (remaining === 0) {
-      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), affordableNow: true }
+      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), daysLeft: 0, affordableNow: true }
     }
     cumulative += remaining
     const missing = cumulative - available
     if (missing <= 0) {
-      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), affordableNow: true }
+      return { wish, cumulative, missing: 0, affordableFrom: startOfDay(today), daysLeft: 0, affordableNow: true }
     }
     if (perDay <= 0) {
-      return { wish, cumulative, missing, affordableFrom: null, affordableNow: false }
+      return { wish, cumulative, missing, affordableFrom: null, daysLeft: null, affordableNow: false }
     }
     const days = Math.ceil(missing / perDay)
-    return { wish, cumulative, missing, affordableFrom: addDays(today, days), affordableNow: false }
+    return { wish, cumulative, missing, affordableFrom: addDays(today, days), daysLeft: days, affordableNow: false }
   })
 }
 
@@ -246,6 +249,8 @@ export interface MonthOverview {
   income: number
   /** false = kein echter Wert eingetragen, es wird mit dem erwarteten Netto gerechnet */
   incomeIsActual: boolean
+  /** Extra Geld in diesem Monat, z. B. Geschenke */
+  extra: number
   hours?: number
   fixedCosts: number
   /** Alltagsausgaben plus gekaufte Wünsche */
@@ -257,6 +262,7 @@ export interface MonthOverview {
 export function monthOverview(s: Settings, expenses: Expense[], today: Date, limit = 6): MonthOverview[] {
   const months = new Set<string>([monthKey(today)])
   s.incomeHistory.forEach((m) => months.add(m.month))
+  s.deposits.forEach((d) => months.add(d.date.slice(0, 7)))
   expenses.forEach((e) => months.add(e.date.slice(0, 7)))
   const fixed = fixedCostTotal(s)
   const expected = monthlyNetIncome(s)
@@ -267,14 +273,16 @@ export function monthOverview(s: Settings, expenses: Expense[], today: Date, lim
       const entry = s.incomeHistory.find((m) => m.month === month)
       const income = entry ? entry.net : expected
       const spent = expenses.filter((e) => e.date.startsWith(month)).reduce((sum, e) => sum + e.amount, 0)
+      const extra = s.deposits.filter((d) => d.date.startsWith(month)).reduce((sum, d) => sum + d.amount, 0)
       return {
         month,
         income,
         incomeIsActual: Boolean(entry),
+        extra,
         hours: entry?.hours,
         fixedCosts: fixed,
         spent,
-        left: income - fixed - spent,
+        left: income + extra - fixed - spent,
       }
     })
 }

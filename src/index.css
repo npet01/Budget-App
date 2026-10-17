@@ -267,6 +267,26 @@ button.full {
   border-color: var(--accent);
 }
 
+.worktime.ok {
+  color: var(--ok);
+}
+
+.deposits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deposits li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
 .save-panel {
   display: flex;
   flex-direction: column;

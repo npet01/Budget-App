@@ -15,6 +15,15 @@ export interface IncomeMonth {
   hours?: number
 }
 
+/** Geld, das zusätzlich reinkommt, z. B. zum Geburtstag. */
+export interface Deposit {
+  id: string
+  /** YYYY-MM-DD */
+  date: string
+  label: string
+  amount: number
+}
+
 export interface Settings {
   /** Festgehalt pro Monat oder Bezahlung pro Stunde */
   payType: 'salary' | 'hourly'
@@ -41,6 +50,8 @@ export interface Settings {
   savings: number
   /** Stichtag, an dem "savings" galt (YYYY-MM-DD); ab da wird hochgerechnet */
   savingsDate: string
+  /** Extra Geld, das seitdem dazugekommen ist */
+  deposits: Deposit[]
 }
 
 export interface Expense {
