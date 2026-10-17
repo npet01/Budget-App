@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { Expense, Settings, Wish } from '../lib/types'
-import { availableToday, currentMonth, daysBetween, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, priceToWorkTime, realHourlyWage, type WishPlan } from '../lib/calc'
-import { formatDate, formatEuro, formatWorkTime, newId, parseAmount, todayIso } from '../lib/format'
+import type { Deposit, Expense, Settings, Wish } from '../lib/types'
+import { availableToday, currentMonth, extraPerDayForTarget, monthlySurplus, parseIsoDate, planWishes, realHourlyWage, type WishPlan } from '../lib/calc'
+import { formatDate, formatEuro, newId, parseAmount, todayIso } from '../lib/format'
 
 interface Props {
   settings: Settings
   wishes: Wish[]
   expenses: Expense[]
   setWishes: (w: Wish[]) => void
+  setDeposits: (d: Deposit[]) => void
   onBought: (wish: Wish) => void
   shared: { name: string; url: string } | null
   clearShared: () => void
@@ -17,7 +18,7 @@ const THINK_HOURS = 48
 const EXTRA_OPTIONS = [1, 2, 5, 10]
 const POT_STEPS = [5, 10, 20, 50]
 
-export function WishesView({ settings, wishes, expenses, setWishes, onBought, shared, clearShared }: Props) {
+export function WishesView({ settings, wishes, expenses, setWishes, setDeposits, onBought, shared, clearShared }: Props) {
   const today = new Date()
   const plans = planWishes(wishes, settings, expenses, today)
   const surplus = monthlySurplus(settings)
@@ -34,6 +35,12 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
             <span>Netto{month.incomeIsActual ? '' : ' (erwartet)'}</span>
             <span>{formatEuro(month.income)}</span>
           </div>
+          {month.extra > 0 && (
+            <div>
+              <span>Extra bekommen</span>
+              <span>+ {formatEuro(month.extra)}</span>
+            </div>
+          )}
           <div>
             <span>Feste Ausgaben</span>
             <span>− {formatEuro(month.fixedCosts)}</span>
@@ -64,13 +71,21 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
         </div>
       </section>
 
+      <AddMoney settings={settings} setDeposits={setDeposits} />
+
       {surplus <= 0 && (
         <p className="warning">
           Nach Fixkosten, Alltagsbudget und Puffer bleibt nichts übrig. Wünsche gehen nur mit extra Zurücklegen oder mit Schulden.
         </p>
       )}
 
-      <WishForm settings={settings} shared={shared} clearShared={clearShared} onAdd={(w) => setWishes([...wishes, w])} />
+      <WishForm
+        queued={wishes.length > 0}
+        daysFor={(price) => {
+          const all = planWishes([...wishes, { id: 'neu', name: '', price, createdAt: todayIso() }], settings, expenses, today)
+          return all[all.length - 1].daysLeft
+        }}
+        shared={shared} clearShared={clearShared} onAdd={(w) => setWishes([...wishes, w])} />
 
       {plans.length === 0 ? (
         <p className="empty">
@@ -79,7 +94,7 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
       ) : (
         <ul className="wishes">
           {plans.map((plan, i) => {
-            const { wish, affordableFrom, affordableNow } = plan
+            const { wish, affordableFrom, affordableNow, daysLeft } = plan
             const thinking = wish.thinkUntil && new Date(wish.thinkUntil) > today
             const saved = wish.saved ?? 0
             const target = wish.targetDate ? parseIsoDate(wish.targetDate) : null
@@ -100,14 +115,9 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
                     </button>
                   </div>
                 </div>
-                <p className="worktime">{formatWorkTime(priceToWorkTime(wish.price, settings))} Arbeit</p>
-                <p className={affordableNow ? 'status ok' : affordableFrom ? 'status' : 'status negative'}>
-                  {affordableNow
-                    ? 'Jetzt leistbar, ohne Schulden'
-                    : affordableFrom
-                      ? `Leistbar ab ${formatDate(affordableFrom)}`
-                      : 'Mit deinem Plan nicht ohne Schulden leistbar'}
-                </p>
+                <p className={affordableNow ? 'worktime ok' : affordableFrom ? 'worktime' : 'worktime negative'}>{daysText(daysLeft)}</p>
+                {affordableFrom && !affordableNow && <p className="status">bis zum Kauf, also am {formatDate(affordableFrom)}</p>}
+                {!affordableFrom && <p className="status">Dein Plan reicht dafür nicht. Leg extra Geld zurück oder trag Geld ein, das dazukommt.</p>}
                 {saved > 0 && (
                   <div className="pot">
                     <div className="bar" aria-hidden>
@@ -155,6 +165,69 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
   )
 }
 
+function daysText(days: number | null): string {
+  if (days === null) return 'Ohne Schulden nicht drin'
+  if (days === 0) return 'Jetzt leistbar, ohne Schulden'
+  return days === 1 ? 'Noch 1 Tag' : `Noch ${days} Tage`
+}
+
+function AddMoney({ settings, setDeposits }: { settings: Settings; setDeposits: (d: Deposit[]) => void }) {
+  const [open, setOpen] = useState(false)
+  const [amountText, setAmountText] = useState('')
+  const [label, setLabel] = useState('')
+  const amount = parseAmount(amountText)
+  const recent = settings.deposits.filter((d) => d.date >= settings.savingsDate).slice(-5).reverse()
+
+  if (!open) {
+    return (
+      <button className="secondary" onClick={() => setOpen(true)}>
+        + Geld hinzufügen
+      </button>
+    )
+  }
+  return (
+    <section className="card">
+      <h2>Geld dazubekommen?</h2>
+      <p className="muted">Zum Beispiel zum Geburtstag, Rückzahlungen oder ein Nebenjob. Es zählt sofort für deine Wünsche.</p>
+      <div className="input-suffix">
+        <input inputMode="decimal" placeholder="Betrag" value={amountText} onChange={(e) => setAmountText(e.target.value)} />
+        <em>€</em>
+      </div>
+      <input placeholder="Wofür? z. B. Geburtstag" value={label} onChange={(e) => setLabel(e.target.value)} />
+      <div className="actions">
+        <button className="secondary" onClick={() => setOpen(false)}>
+          Schließen
+        </button>
+        <button
+          disabled={!amount || amount <= 0}
+          onClick={() => {
+            setDeposits([...settings.deposits, { id: newId(), date: todayIso(), label: label.trim() || 'Extra', amount: amount! }])
+            setAmountText('')
+            setLabel('')
+          }}
+        >
+          Hinzufügen
+        </button>
+      </div>
+      {recent.length > 0 && (
+        <ul className="deposits">
+          {recent.map((d) => (
+            <li key={d.id}>
+              <span>
+                {d.label} · {formatDate(parseIsoDate(d.date))}
+              </span>
+              <span>+ {formatEuro(d.amount)}</span>
+              <button className="icon" onClick={() => setDeposits(settings.deposits.filter((x) => x.id !== d.id))} aria-label={`${d.label} löschen`}>
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
 function targetText(target: Date, needed: number | null): string {
   const date = formatDate(target)
   if (needed === null) return `Dein Wunschdatum ${date} ist schon vorbei.`
@@ -181,8 +254,8 @@ function SavePanel({
 }) {
   const saved = wish.saved ?? 0
   const [extra, setExtra] = useState(0)
-  const faster = extra > 0 && !plan.affordableNow ? planWishes(wishes, settings, expenses, new Date(), extra)[index].affordableFrom : null
-  const fewer = faster && plan.affordableFrom ? daysBetween(faster, plan.affordableFrom) : null
+  const faster = extra > 0 && !plan.affordableNow ? planWishes(wishes, settings, expenses, new Date(), extra)[index].daysLeft : null
+  const fewer = faster !== null && plan.daysLeft !== null ? plan.daysLeft - faster : null
   const setSaved = (n: number) => onChange({ saved: Math.max(0, Math.round(n * 100) / 100) || undefined })
 
   return (
@@ -229,16 +302,23 @@ function SavePanel({
               </button>
             ))}
           </div>
-          {faster && (
+          {faster !== null && (
             <small className="faster">
-              Dann ab {formatDate(faster)}
-              {fewer ? `, ${fewer === 1 ? '1 Tag' : `${fewer} Tage`} früher` : ''}
+              Dann noch {faster === 1 ? '1 Tag' : `${faster} Tage`}
+              {fewer ? `, also ${fewer === 1 ? '1 Tag' : `${fewer} Tage`} weniger` : ''}
             </small>
           )}
         </div>
       )}
     </div>
   )
+}
+
+function previewText(days: number | null, queued: boolean): string {
+  if (days === null) return 'Mit deinem Plan ohne Schulden nicht drin'
+  if (days === 0) return 'Sofort leistbar'
+  // Neue Wünsche kommen ans Ende der Liste, also nach allen anderen dran
+  return `Noch ${days === 1 ? '1 Tag' : `${days} Tage`} bis zum Kauf${queued ? ', nach deinen anderen Wünschen' : ''}`
 }
 
 function move<T>(list: T[], from: number, to: number): T[] {
@@ -249,12 +329,14 @@ function move<T>(list: T[], from: number, to: number): T[] {
 }
 
 function WishForm({
-  settings,
+  queued,
+  daysFor,
   onAdd,
   shared,
   clearShared,
 }: {
-  settings: Settings
+  queued: boolean
+  daysFor: (price: number) => number | null
   onAdd: (w: Wish) => void
   shared: Props['shared']
   clearShared: () => void
@@ -300,7 +382,7 @@ function WishForm({
         <em>€</em>
       </div>
       {url && <small className="muted link">Link: {url}</small>}
-      {price ? <p className="preview">= {formatWorkTime(priceToWorkTime(price, settings))} Arbeit</p> : null}
+      {price ? <p className="preview">{previewText(daysFor(price), queued)}</p> : null}
       <label className="check">
         <input type="checkbox" checked={think} onChange={(e) => setThink(e.target.checked)} />
         48 Stunden Bedenkzeit

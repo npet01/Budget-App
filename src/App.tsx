@@ -86,6 +86,7 @@ export default function App() {
           wishes={wishes}
           expenses={expenses}
           setWishes={setWishes}
+          setDeposits={(deposits) => setSettings({ ...settings, deposits })}
           onBought={markBought}
           shared={shared}
           clearShared={clearShared}

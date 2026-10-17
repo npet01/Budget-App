@@ -18,6 +18,7 @@ const settings: Settings = {
   safetyBuffer: 100,
   savings: 200,
   savingsDate: '2026-10-01',
+  deposits: [],
 }
 
 const wish = (id: string, price: number): Wish => ({ id, name: id, price, createdAt: '2026-10-01' })
@@ -154,5 +155,29 @@ describe('Laufender Monat', () => {
     expect(m.fixedCosts).toBe(800)
     expect(m.spent).toBe(120)
     expect(m.left).toBe(2000 - 800 - 120)
+  })
+})
+
+describe('Geld hinzufügen', () => {
+  const gift = { id: 'g', date: '2026-10-05', label: 'Geburtstag', amount: 100 }
+
+  it('zählt zum freien Geld und verkürzt die Wartezeit', () => {
+    const today = day('2026-10-05')
+    const withGift = { ...settings, deposits: [gift] }
+    expect(availableToday(withGift, [], today) - availableToday(settings, [], today)).toBeCloseTo(100, 5)
+    const [before] = planWishes([wish('a', 800)], settings, [], today)
+    const [after] = planWishes([wish('a', 800)], withGift, [], today)
+    expect(after.daysLeft!).toBeLessThan(before.daysLeft!)
+  })
+
+  it('zählt nicht, wenn es vor dem Stichtag des Ersparten lag', () => {
+    const old = { ...settings, deposits: [{ ...gift, date: '2026-09-20' }] }
+    expect(availableToday(old, [], day('2026-10-01'))).toBe(200)
+  })
+
+  it('erscheint im Monat als Extra und erhöht das Restgeld', () => {
+    const m = currentMonth({ ...settings, deposits: [gift] }, [], day('2026-10-10'))
+    expect(m.extra).toBe(100)
+    expect(m.left).toBe(2000 + 100 - 800)
   })
 })

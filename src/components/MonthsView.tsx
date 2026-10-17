@@ -64,7 +64,7 @@ export function MonthsView({ settings, expenses, setIncomeHistory }: Props) {
       <h2 className="section-title">Deine Monate</h2>
       <ul className="months">
         {overview.map((m) => {
-          const used = m.income > 0 ? Math.min(100, ((m.fixedCosts + m.spent) / m.income) * 100) : 100
+          const used = m.income + m.extra > 0 ? Math.min(100, ((m.fixedCosts + m.spent) / (m.income + m.extra)) * 100) : 100
           return (
             <li key={m.month} className="card month">
               <div className="month-head">
@@ -86,6 +86,12 @@ export function MonthsView({ settings, expenses, setIncomeHistory }: Props) {
                   <span>Netto{m.hours ? ` · ${formatHours(m.hours)} gearbeitet` : ''}</span>
                   <span>{formatEuro(m.income)}</span>
                 </div>
+                {m.extra > 0 && (
+                  <div>
+                    <span>Extra bekommen</span>
+                    <span>+ {formatEuro(m.extra)}</span>
+                  </div>
+                )}
                 <div>
                   <span>Fixkosten</span>
                   <span>− {formatEuro(m.fixedCosts)}</span>

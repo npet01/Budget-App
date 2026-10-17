@@ -17,11 +17,12 @@ export const DEFAULT_SETTINGS: Settings = {
   safetyBuffer: 50,
   savings: 0,
   savingsDate: todayIso(),
+  deposits: [],
 }
 
 /** Übernimmt Einstellungen aus der ersten Version, die nur ein Nettogehalt kannte. */
 export function migrateSettings(stored: Settings & { netIncome?: number }): Settings {
-  if (stored.payType) return stored
+  if (stored.payType) return stored.deposits ? stored : { ...stored, deposits: [] }
   const { netIncome, ...rest } = stored
   return {
     ...DEFAULT_SETTINGS,
