@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { Expense, Settings, Wish } from '../lib/types'
-import { availableToday, monthlySurplus, planWishes, priceToWorkTime, realHourlyWage } from '../lib/calc'
+import { availableToday, daysBetween, monthlySurplus, planWishes, priceToWorkTime, realHourlyWage } from '../lib/calc'
 import { formatDate, formatEuro, formatWorkTime, newId, parseAmount, todayIso } from '../lib/format'
 
 interface Props {
@@ -14,11 +14,16 @@ interface Props {
 }
 
 const THINK_HOURS = 48
+const EXTRA_OPTIONS = [1, 2, 5, 10]
+const DAYS_PER_MONTH = 365.25 / 12
 
 export function WishesView({ settings, wishes, expenses, setWishes, onBought, shared, clearShared }: Props) {
   const today = new Date()
   const plans = planWishes(wishes, settings, expenses, today)
   const surplus = monthlySurplus(settings)
+  const [extra, setExtra] = useState(0)
+  const faster = extra > 0 ? planWishes(wishes, settings, expenses, today, extra) : null
+  const waiting = plans.some((p) => !p.affordableNow)
 
   return (
     <>
@@ -45,6 +50,8 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
 
       <WishForm settings={settings} shared={shared} clearShared={clearShared} onAdd={(w) => setWishes([...wishes, w])} />
 
+      {waiting && <SaveFaster extra={extra} setExtra={setExtra} />}
+
       {plans.length === 0 ? (
         <p className="empty">
           Noch keine Wünsche. Trag oben etwas ein oder teile ein Produkt aus einer Shop-App mit dieser App.
@@ -53,6 +60,8 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
         <ul className="wishes">
           {plans.map(({ wish, affordableFrom, affordableNow }, i) => {
             const thinking = wish.thinkUntil && new Date(wish.thinkUntil) > today
+            const sooner = faster && !affordableNow ? faster[i].affordableFrom : null
+            const saved = sooner && affordableFrom ? daysBetween(sooner, affordableFrom) : null
             return (
               <li key={wish.id} className="card wish">
                 <div className="wish-head">
@@ -77,6 +86,12 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
                       ? `Leistbar ab ${formatDate(affordableFrom)}`
                       : 'Mit deinem Plan nicht ohne Schulden leistbar'}
                 </p>
+                {sooner && saved !== 0 && (
+                  <p className="faster">
+                    Mit {formatEuro(extra)} pro Tag: ab {formatDate(sooner)}
+                    {saved ? `, ${saved === 1 ? '1 Tag' : `${saved} Tage`} früher` : ''}
+                  </p>
+                )}
                 {thinking && (
                   <p className="thinking">Bedenkzeit läuft noch bis {formatDate(new Date(wish.thinkUntil!))}. Willst du es dann immer noch?</p>
                 )}
@@ -94,6 +109,27 @@ export function WishesView({ settings, wishes, expenses, setWishes, onBought, sh
         </ul>
       )}
     </>
+  )
+}
+
+function SaveFaster({ extra, setExtra }: { extra: number; setExtra: (n: number) => void }) {
+  return (
+    <section className="card">
+      <h2>Schneller ans Ziel?</h2>
+      <p className="muted">Wie viel könntest du jeden Tag zusätzlich zur Seite legen?</p>
+      <div className="chips">
+        {EXTRA_OPTIONS.map((n) => (
+          <button key={n} className={extra === n ? 'chip on' : 'chip'} aria-pressed={extra === n} onClick={() => setExtra(extra === n ? 0 : n)}>
+            {formatEuro(n)} / Tag
+          </button>
+        ))}
+      </div>
+      {extra > 0 && (
+        <p className="muted">
+          Das sind etwa {formatEuro(extra * DAYS_PER_MONTH)} im Monat. Unten siehst du, wie viel früher jeder Wunsch dann drin ist.
+        </p>
+      )}
+    </section>
   )
 }
 

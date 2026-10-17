@@ -260,6 +260,18 @@ button.full {
   font-size: 1.1rem;
 }
 
+.chip.on {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-style: solid;
+  border-color: var(--accent);
+}
+
+.faster {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .negative {
   color: var(--bad);
 }

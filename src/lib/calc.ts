@@ -151,16 +151,18 @@ export interface WishPlan {
 
 /**
  * Plant die Wünsche in Listenreihenfolge: Ein Wunsch ist leistbar, sobald das
- * verfügbare Geld alle Wünsche davor und ihn selbst abdeckt.
+ * verfügbare Geld alle Wünsche davor und ihn selbst abdeckt. `extraPerDay` ist
+ * Geld, das man ab heute zusätzlich täglich zur Seite legt.
  */
 export function planWishes(
   wishes: Wish[],
   s: Settings,
   expenses: Expense[],
   today: Date,
+  extraPerDay = 0,
 ): WishPlan[] {
   const available = availableToday(s, expenses, today)
-  const perDay = monthlySurplus(s) / DAYS_PER_MONTH
+  const perDay = monthlySurplus(s) / DAYS_PER_MONTH + extraPerDay
   let cumulative = 0
   return wishes.map((wish) => {
     cumulative += wish.price
