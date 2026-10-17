@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, availableToday, currentMonth, extraPerDayForTarget, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
+import { addDays, availableToday, currentMonth, monthAllowance, surplusPerDay, extraPerDayForTarget, planWishes, priceToWorkTime, realHourlyWage, shiftByExpense } from './calc'
 import type { Expense, Settings, Wish } from './types'
 
 const settings: Settings = {
@@ -179,5 +179,17 @@ describe('Geld hinzufügen', () => {
     const m = currentMonth({ ...settings, deposits: [gift] }, [], day('2026-10-10'))
     expect(m.extra).toBe(100)
     expect(m.left).toBe(2000 + 100 - 800)
+  })
+})
+
+describe('Alltagsbudget und Tagesbetrag', () => {
+  it('gilt im Startmonat nur anteilig, danach voll', () => {
+    const s = { ...settings, dailyBudget: 400, savingsDate: '2026-10-17' }
+    expect(monthAllowance(s, '2026-10')).toBeCloseTo((400 * 15) / 31, 5)
+    expect(monthAllowance(s, '2026-11')).toBe(400)
+  })
+
+  it('verteilt den Monatsüberschuss auf die Tage', () => {
+    expect(surplusPerDay(settings)).toBeCloseTo(500 / (365.25 / 12), 5)
   })
 })

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { Expense, Settings } from '../lib/types'
-import { priceToWorkTime, spentThisMonth } from '../lib/calc'
+import { monthAllowance, priceToWorkTime, spentThisMonth } from '../lib/calc'
 import { formatEuro, formatWorkTime, newId, parseAmount, todayIso } from '../lib/format'
 import { findReceiptTotal, guessShop, recognizeReceipt } from '../lib/receipt'
 
@@ -14,8 +14,9 @@ interface Props {
 export function ExpensesView({ settings, expenses, onAdd, onRemove }: Props) {
   const today = new Date()
   const spent = spentThisMonth(expenses, today)
-  const left = settings.dailyBudget - spent
   const monthKey = todayIso(today).slice(0, 7)
+  const budget = monthAllowance(settings, monthKey)
+  const left = budget - spent
   const thisMonth = expenses.filter((e) => e.date.startsWith(monthKey)).sort((a, b) => b.date.localeCompare(a.date))
 
   return (
@@ -23,7 +24,7 @@ export function ExpensesView({ settings, expenses, onAdd, onRemove }: Props) {
       <section className="card summary">
         <div>
           <small>Alltagsbudget</small>
-          <strong>{formatEuro(settings.dailyBudget)}</strong>
+          <strong>{formatEuro(budget)}</strong>
         </div>
         <div>
           <small>Ausgegeben</small>
@@ -35,7 +36,7 @@ export function ExpensesView({ settings, expenses, onAdd, onRemove }: Props) {
         </div>
       </section>
       <div className="bar" aria-hidden>
-        <span style={{ width: `${Math.min(100, (spent / Math.max(1, settings.dailyBudget)) * 100)}%` }} className={left < 0 ? 'over' : ''} />
+        <span style={{ width: `${Math.min(100, (spent / Math.max(1, budget)) * 100)}%` }} className={left < 0 ? 'over' : ''} />
       </div>
 
       <ExpenseForm settings={settings} onAdd={onAdd} />

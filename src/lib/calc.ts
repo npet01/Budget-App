@@ -114,10 +114,10 @@ export function availableToday(s: Settings, expenses: Expense[], today: Date): n
   // Was aus einem Spartopf bezahlt wurde, war nie Teil des Plans
   const wishSpend = since.filter((e) => e.wish).reduce((sum, e) => sum + e.amount - (e.fromPot ?? 0), 0)
   const deposits = s.deposits.filter((d) => d.date >= s.savingsDate).reduce((sum, d) => sum + d.amount, 0)
-  return s.savings + deposits + (monthlySurplus(s) / DAYS_PER_MONTH) * elapsed - overspend(s, since, start) - wishSpend
+  return s.savings + deposits + (monthlySurplus(s) / DAYS_PER_MONTH) * elapsed - overspend(s, since) - wishSpend
 }
 
-function overspend(s: Settings, expenses: Expense[], start: Date): number {
+function overspend(s: Settings, expenses: Expense[]): number {
   const byMonth = new Map<string, number>()
   for (const e of expenses) {
     if (e.wish) continue
@@ -125,16 +125,21 @@ function overspend(s: Settings, expenses: Expense[], start: Date): number {
     byMonth.set(key, (byMonth.get(key) ?? 0) + e.amount)
   }
   let total = 0
-  for (const [key, spent] of byMonth) {
-    // Im Startmonat gilt nur der Teil des Budgets ab dem Stichtag
-    let allowance = s.dailyBudget
-    if (key === monthKey(start)) {
-      const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()
-      allowance *= (daysInMonth - start.getDate() + 1) / daysInMonth
-    }
-    total += Math.max(0, spent - allowance)
-  }
+  for (const [key, spent] of byMonth) total += Math.max(0, spent - monthAllowance(s, key))
   return total
+}
+
+/** Alltagsbudget eines Monats (YYYY-MM); im Startmonat nur der Teil ab dem Stichtag. */
+export function monthAllowance(s: Settings, key: string): number {
+  const start = parseIsoDate(s.savingsDate)
+  if (key !== monthKey(start)) return s.dailyBudget
+  const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate()
+  return (s.dailyBudget * (daysInMonth - start.getDate() + 1)) / daysInMonth
+}
+
+/** Was im Schnitt jeden Tag für Wünsche dazukommt. */
+export function surplusPerDay(s: Settings): number {
+  return monthlySurplus(s) / DAYS_PER_MONTH
 }
 
 export function parseIsoDate(iso: string): Date {
